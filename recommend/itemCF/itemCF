@@ -1,0 +1,116 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Dec  2 23:29:55 2017
+
+@author: shanesu
+"""
+
+import pandas as pd
+import numpy as np
+from pandas import DataFrame
+import math
+
+#读取数据到csv和data
+def prepareDataSet(): 
+    unames=['user_id','age','gender','occupation','zip']
+    users=pd.read_table('ml-100k/u.user',sep='|',header=None,names=unames)
+    
+    mnames = ['movie_id', 'title', 'release_data','video_release_date','URL',\
+              'unknown','Action','Adventure','Animation','Childrens',\
+              'Comedy','Crime','Documentary','Drama','Fantasy',\
+              'Film-Noir','Horror','Musical','Mystery','Romance','Sci_Fi',\
+              'Thriller','War','Western']
+    movies = pd.read_table('ml-100k/u.item', sep='|', header=None, names=mnames,encoding='ANSI')
+    
+    rnames = ['user_id', 'movie_id', 'rating', 'timestamp']
+    ratings = pd.read_table('ml-100k/u.data', header=None, names=rnames)
+    
+    all_data = pd.merge(pd.merge(ratings, users), movies)
+    data = DataFrame(data=all_data,columns=['user_id','movie_id'])
+    data.to_csv('data.csv')
+    X=data['user_id']
+    Y=data['movie_id']
+    return X, Y, data
+
+def readDataSet():
+#读取之前存储的表格并提取我们需要的信息
+    data=pd.read_csv('data.csv')
+    X=data['user_id']
+    Y=data['movie_id']
+    return X, Y, data
+
+#建立倒排矩阵,x用户，y物品
+def ItemSimilarity(X, Y):
+    #计算用户-物品倒排表
+    user_item=dict()
+    for i in range(Y.count()):
+        user=X.iloc[i]
+        item=Y.iloc[i]        
+        if user not in user_item:
+            user_item[user]=set()
+        user_item[user].add(item)
+    #对于每个拥挤，将他的物品列表中的物品两两在共现矩阵C中加1
+    #N(i)为某个物品出现的总数
+    C={}
+    N={}
+    for u,items in user_item.items():
+        for i in items:
+            N.setdefault(i,0)
+            N[i]+=1
+            C.setdefault(i,{})
+            for j in items:
+                if i==j:
+                    continue
+                C[i].setdefault(j,0)
+                C[i][j]+=1/math.log(1+len(user_item[u]))  
+                #活跃用户对物品相似度的贡献应该小于不活跃的用户!!
+    #计算相似度
+    W=C.copy()
+    maxw=np.zeros(len(W)+1)
+    for i,related_items in C.items():
+        for j,cij in related_items.items():
+            W[i][j]=cij/math.sqrt(N[i]*N[j])
+            if W[i][j]>maxw[j]:
+                maxw[j]=W[i][j]
+            #公式惩罚了物品j的权重，减轻了热门物品会和很多物品相似的可能性!!    
+    #归一化!!
+    for i,items in W.items():
+        for j,cij in items.items():
+            W[i][j]=W[i][j]/maxw[j]
+    return W, user_item
+
+def recommend(user,user_item,W,K=10):
+    #取与用户喜欢的物品集合中各物品，分别最相似的排名前k个物品
+    rank={}
+    interacted_items=user_item[user]
+    for i in interacted_items:
+        for j, wij in sorted(W[i].items(),key=lambda x:x[1],reverse=True)[0:K]:
+            if j in interacted_items:
+                continue
+            rank.setdefault(j,0)
+            rank[j]+=wij
+    return rank
+    
+def dict2list(dic:dict):
+    ''' 将字典转化为列表 '''
+    keys = dic.keys()
+    vals = dic.values()
+    lst = [(key, val) for key, val in zip(keys, vals)]
+    return lst    
+'''   
+import itemCF
+X, Y, data=itemCF.readDataSet()
+W, user_item = itemCF.ItemSimilarity(X,Y)
+rank = itemCF.recommend(20,user_item,W,20)
+sorted_rank=sorted(itemCF.dict2list(rank), key=lambda x:x[1], reverse=True)[0:10]
+'''
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
